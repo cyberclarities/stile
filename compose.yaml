@@ -36,15 +36,27 @@ services:
       - ./sites:/etc/nginx/templates:ro      # one *.conf.template per service
       - ./certs:/etc/nginx/certs:ro          # optional real certificates: <site>.crt + <site>.key
       - state:/var/lib/stile           # local CA and issued certificates
+      # Scratch space on a read-only root filesystem. Long syntax so the mode can
+      # be set: the short "tmpfs:" form mounts these root-owned and not
+      # writable, and nginx runs as uid 101. 1777 is the same mode /tmp has on
+      # any Linux host. conf.d holds the site configs rendered from sites/ and
+      # the per-site certificate includes, rebuilt on every start.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 67108864          # 64 MB
+          mode: 01777
+      - type: tmpfs
+        target: /etc/nginx/conf.d
+        tmpfs:
+          size: 1048576           # 1 MB
+          mode: 01777
 
     networks:
       - proxy
 
     # Hardening. Nothing listens below 1024, so no capabilities are needed.
     read_only: true
-    tmpfs:
-      - /tmp:size=64m
-      - /etc/nginx/conf.d:size=1m             # rendered site configs land here
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
