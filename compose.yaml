@@ -1,0 +1,74 @@
+# Shared Nginx reverse proxy for the projects under ~/source.
+#
+# Start this first:   cp .env.example .env && docker compose up -d --build
+# Then, in each project whose .env opts in to the proxy (see README.md):
+#                     docker compose up -d
+#
+# Each project keeps its own TCP port, the same one its Caddy used:
+#   plumb 6443   cairn 7443   skerry 8443
+# To add a project: ./add-service.sh (see README.md, "Adding a service").
+name: stile
+
+services:
+  nginx:
+    build: .
+    image: stile:local
+    container_name: stile
+    restart: unless-stopped
+
+    ports:
+      # >>> service ports (add-service.sh inserts above the end marker)
+      - "${PLUMB_HTTPS_PORT:-6443}:6443"
+      - "${CAIRN_HTTPS_PORT:-7443}:7443"
+      - "${SKERRY_HTTPS_PORT:-8443}:8443"
+      # <<< service ports
+
+    env_file:
+      - path: .env
+        required: true                      # the site templates cannot render without it
+    environment:
+      # Only variables named *_SERVER_NAME, *_UPSTREAM or *_MAX_BODY are
+      # substituted into sites/*.conf.template. Everything else, including
+      # every nginx $variable, passes through untouched.
+      NGINX_ENVSUBST_FILTER: "_(SERVER_NAME|UPSTREAM|MAX_BODY)$"
+
+    volumes:
+      - ./sites:/etc/nginx/templates:ro      # one *.conf.template per service
+      - ./certs:/etc/nginx/certs:ro          # optional real certificates: <site>.crt + <site>.key
+      - state:/var/lib/stile           # local CA and issued certificates
+
+    networks:
+      - proxy
+
+    # Hardening. Nothing listens below 1024, so no capabilities are needed.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+      - /etc/nginx/conf.d:size=1m             # rendered site configs land here
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 256m
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  # The projects join this network from their own compose files as an
+  # external network, so it has a fixed name and this project owns it.
+  proxy:
+    name: ${PROXY_NETWORK:-stile_net}
+
+volumes:
+  state:
+    name: stile_state

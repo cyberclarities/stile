@@ -1,0 +1,22 @@
+# Put __NAME__ behind Stile, the shared Nginx proxy (~/source/stile).
+#
+# Turned on from __NAME__'s .env:
+#     COMPOSE_FILE=<your base compose file>:docker-compose.nginx.yml
+#
+# Rename the service below to whatever __NAME__'s compose file calls the
+# container that serves HTTP. If the project has its own proxy service (Caddy
+# or similar), park it with a profile, the way cairn and skerry do.
+services:
+  web:
+    # If the base file publishes the app's port on the host, nginx now owns
+    # that port. Uncomment to drop the host mapping (Compose 2.24.4 or later).
+    # ports: !reset []
+    networks:
+      default:
+      stile_net:
+        aliases: [__ALIAS__]
+
+networks:
+  stile_net:
+    external: true
+    name: ${STILE_NETWORK:-stile_net}

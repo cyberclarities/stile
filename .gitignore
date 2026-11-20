@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+certs/*
+!certs/README.md
+service-template/out/
+stile-ca.crt
+.DS_Store

@@ -1,0 +1,37 @@
+# Skerry: risk register.
+#   Browser:  https://${SKERRY_SERVER_NAME}:8443
+#   Upstream: ${SKERRY_UPSTREAM}  (skerry web container, joined to stile_net as "skerry-web")
+#
+# Values come from .env. This file is rendered at container start; edit the
+# template, not the output.
+
+server {
+    listen 8443 ssl default_server;
+    server_name _;
+    include /etc/nginx/snippets/https-listener.conf;
+    include /etc/nginx/conf.d/tls/skerry.inc;
+    return 421;
+}
+
+server {
+    listen 8443 ssl;
+    server_name ${SKERRY_SERVER_NAME};
+    include /etc/nginx/snippets/https-listener.conf;
+    include /etc/nginx/conf.d/tls/skerry.inc;
+
+    # Settings > restore takes an uploaded SQLite file. Skerry sets no limit of
+    # its own and Caddy set none either, so size this to the largest database
+    # you expect to restore.
+    client_max_body_size ${SKERRY_MAX_BODY};
+
+    # GUNICORN_TIMEOUT defaults to 300s. Give the app the full window plus a
+    # little, so gunicorn reports the timeout rather than nginx.
+    proxy_read_timeout 330s;
+    proxy_send_timeout 330s;
+
+    location / {
+        set $upstream ${SKERRY_UPSTREAM};
+        proxy_pass http://$upstream;
+        include /etc/nginx/snippets/proxy.conf;
+    }
+}

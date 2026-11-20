@@ -1,0 +1,41 @@
+# CAIRN: incident case management.
+#   Browser:  https://${CAIRN_SERVER_NAME}:7443
+#   Upstream: ${CAIRN_UPSTREAM}  (cairn web container, joined to stile_net as "cairn-web")
+#
+# Values come from .env. This file is rendered at container start; edit the
+# template, not the output.
+
+# Anything that reaches 7443 with a Host this site does not answer for.
+# The apps trust X-Forwarded-Host (ProxyFix x_host=1), so a request for some
+# other name should never be passed through. Caddy refused these too.
+server {
+    listen 7443 ssl default_server;
+    server_name _;
+    include /etc/nginx/snippets/https-listener.conf;
+    include /etc/nginx/conf.d/tls/cairn.inc;
+    return 421;
+}
+
+server {
+    listen 7443 ssl;
+    server_name ${CAIRN_SERVER_NAME};
+    include /etc/nginx/snippets/https-listener.conf;
+    include /etc/nginx/conf.d/tls/cairn.inc;
+
+    # Database restore accepts .sql / .sql.gz up to MAX_UPLOAD_MB (512 by
+    # default). nginx's own default is 1 MB, which would break restores and
+    # evidence uploads outright. Keep this at or above MAX_UPLOAD_MB.
+    client_max_body_size ${CAIRN_MAX_BODY};
+
+    # Restores and large evidence uploads run long. Matches the 10m timeouts
+    # in CAIRN's Caddyfile.
+    proxy_read_timeout 10m;
+    proxy_send_timeout 10m;
+    send_timeout       10m;
+
+    location / {
+        set $upstream ${CAIRN_UPSTREAM};
+        proxy_pass http://$upstream;
+        include /etc/nginx/snippets/proxy.conf;
+    }
+}

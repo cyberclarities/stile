@@ -1,0 +1,35 @@
+# Plumb: WordPress version monitor.
+#   Browser:  https://${PLUMB_SERVER_NAME}:6443
+#   Upstream: ${PLUMB_UPSTREAM}  (plumb container, joined to stile_net as "plumb")
+#
+# Plumb is different from the other two. It terminates TLS itself and has no
+# plain-HTTP mode, so nginx talks HTTPS to it as well. Plumb's certificate is
+# self-signed and lives in its own data volume, so nginx does not verify it.
+# That hop never leaves the stile_net Docker network. If plumb ever gains a
+# plain-HTTP option, switch proxy_pass to http:// and drop proxy_ssl_*.
+
+server {
+    listen 6443 ssl default_server;
+    server_name _;
+    include /etc/nginx/snippets/https-listener.conf;
+    include /etc/nginx/conf.d/tls/plumb.inc;
+    return 421;
+}
+
+server {
+    listen 6443 ssl;
+    server_name ${PLUMB_SERVER_NAME};
+    include /etc/nginx/snippets/https-listener.conf;
+    include /etc/nginx/conf.d/tls/plumb.inc;
+
+    # The dashboard takes no uploads.
+    client_max_body_size 1m;
+
+    location / {
+        set $upstream ${PLUMB_UPSTREAM};
+        proxy_pass https://$upstream;
+        proxy_ssl_verify off;
+        proxy_ssl_server_name off;
+        include /etc/nginx/snippets/proxy.conf;
+    }
+}
